@@ -398,6 +398,9 @@
       "@activepieces/piece-facebook-pages": [
         "packages/pieces/community/facebook-pages/src/index.ts"
       ],
+      "@activepieces/piece-famulor": [
+        "packages/pieces/community/famulor/src/index.ts"
+      ],
       "@activepieces/piece-figma": [
         "packages/pieces/community/figma/src/index.ts"
       ],
