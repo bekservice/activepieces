@@ -1,4 +1,10 @@
-import { createTrigger, TriggerStrategy, Property } from '@activepieces/pieces-framework';
+import {
+  AppConnectionValueForAuthProperty,
+  createTrigger,
+  Property,
+  StaticPropsValue,
+  TriggerStrategy,
+} from '@activepieces/pieces-framework';
 import { DedupeStrategy, Polling, pollingHelper, HttpMethod } from '@activepieces/pieces-common';
 import dayjs from 'dayjs';
 import { famulorAuth } from '../common/auth';
@@ -13,7 +19,10 @@ const props = {
   }),
 };
 
-const polling: Polling<unknown, { limit?: number }> = {
+const polling: Polling<
+  AppConnectionValueForAuthProperty<typeof famulorAuth>,
+  StaticPropsValue<typeof props>
+> = {
   strategy: DedupeStrategy.TIMEBASED,
   items: async ({ auth, propsValue }) => {
     const pageSize = Math.min(Math.max(propsValue.limit ?? 100, 1), 200);
