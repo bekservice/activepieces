@@ -25,7 +25,7 @@ Do **not** use Classic 1.0 (\`app.famulor.de\`). The tenant is encoded in the ke
     baseUrl: Property.ShortText({
       displayName: 'Base URL',
       description:
-        'Host only, for verified whitelabel domains. Default is https://app.famulor.io. Do not use app.famulor.de.',
+        'Optional host only. Allowed: https://app.famulor.io (default), https://*.famulor.io, or a verified whitelabel DNS hostname with a letter TLD (for example voice.example.com). Not allowed: IPs, localhost, private names, paths, http, or app.famulor.de.',
       required: false,
       defaultValue: DEFAULT_FAMULOR_HOST,
     }),

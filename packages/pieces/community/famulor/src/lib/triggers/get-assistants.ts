@@ -51,17 +51,17 @@ const polling: Polling<
       offset += pageSize;
     }
 
-    return allAssistants.map((assistant) => {
-      const updated =
-        typeof assistant['updated_at'] === 'string'
-          ? assistant['updated_at']
-          : typeof assistant['created_at'] === 'string'
-            ? assistant['created_at']
-            : undefined;
-      return {
-        epochMilliSeconds: updated ? dayjs(updated).valueOf() : dayjs().valueOf(),
-        data: flattenAssistant(assistant),
-      };
+    return allAssistants.flatMap((assistant) => {
+      const epochMilliSeconds = parseAssistantEpoch(assistant);
+      if (epochMilliSeconds === null) {
+        return [];
+      }
+      return [
+        {
+          epochMilliSeconds,
+          data: flattenAssistant(assistant),
+        },
+      ];
     });
   },
 };
@@ -103,3 +103,36 @@ export const getAssistants = createTrigger({
     return await pollingHelper.poll(polling, context);
   },
 });
+
+function parseAssistantEpoch(assistant: Record<string, unknown>): number | null {
+  const candidates = [assistant['updated_at'], assistant['created_at']];
+  for (const candidate of candidates) {
+    const epoch = parseStableEpoch(candidate);
+    if (epoch !== null) {
+      return epoch;
+    }
+  }
+  return null;
+}
+
+function parseStableEpoch(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value < 1_000_000_000_000 ? value * 1000 : value;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  const parsed = dayjs(trimmed);
+  if (!parsed.isValid()) {
+    return null;
+  }
+  const epoch = parsed.valueOf();
+  if (!Number.isFinite(epoch) || epoch <= 0) {
+    return null;
+  }
+  return epoch;
+}

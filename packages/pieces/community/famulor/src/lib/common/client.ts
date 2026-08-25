@@ -66,20 +66,46 @@ function readString(record: Record<string, unknown>, key: string): string | unde
 }
 
 export function normalizeFamulorHost(input?: string): string {
-  const raw = (input ?? DEFAULT_FAMULOR_HOST).trim() || DEFAULT_FAMULOR_HOST;
-  let host = raw.replace(/\/+$/, '');
-  host = host.replace(/\/api\/v1$/i, '');
-  if (!/^https?:\/\//i.test(host)) {
-    host = `https://${host}`;
+  const raw = (input ?? '').trim();
+  if (raw === '') {
+    return DEFAULT_FAMULOR_HOST;
   }
-  return host.replace(/\/+$/, '');
+
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+  if (parsed.port !== '' && parsed.port !== '443') {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+  if (parsed.search !== '' || parsed.hash !== '') {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+
+  const path = parsed.pathname.replace(/\/+$/, '');
+  if (path !== '' && path !== '/api/v1') {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+
+  const hostname = parsed.hostname.replace(/\.+$/, '').toLowerCase();
+  assertAllowedFamulorHostname(hostname);
+  return `https://${hostname}`;
 }
 
 export function assertNotClassicHost(host: string): void {
-  if (/famulor\.de/i.test(host)) {
-    throw new Error(
-      'app.famulor.de is Famulor Classic 1.0 and has no /api/v1. Use https://app.famulor.io or a verified whitelabel domain.',
-    );
+  const hostname = host.replace(/^https:\/\//i, '').split('/')[0]?.toLowerCase() ?? '';
+  if (hostname === 'famulor.de' || hostname.endsWith('.famulor.de')) {
+    throw new Error(FAMULOR_HOST_ERROR);
   }
 }
 
@@ -100,7 +126,6 @@ export function resolveFamulorAuth(auth: unknown): FamulorCredentials {
   }
 
   const host = normalizeFamulorHost(readString(props, 'baseUrl'));
-  assertNotClassicHost(host);
 
   return {
     apiKey,
@@ -338,8 +363,74 @@ export function flattenWebhookCall(payload: unknown): Record<string, unknown> {
   };
 }
 
+function assertAllowedFamulorHostname(hostname: string): void {
+  if (hostname.length === 0 || hostname.length > 253) {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+  if (hostname === 'famulor.de' || hostname.endsWith('.famulor.de')) {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+  if (isIpLiteralHostname(hostname) || isBlockedInternalHostname(hostname)) {
+    throw new Error(FAMULOR_HOST_ERROR);
+  }
+  if (FAMULOR_IO_HOSTNAME.test(hostname)) {
+    return;
+  }
+  if (isAllowedCustomWhitelabelHostname(hostname)) {
+    return;
+  }
+  throw new Error(FAMULOR_HOST_ERROR);
+}
+
+function isIpLiteralHostname(hostname: string): boolean {
+  if (hostname.includes(':')) {
+    return true;
+  }
+  if (IPV4_HOSTNAME.test(hostname)) {
+    return true;
+  }
+  const labels = hostname.split('.');
+  if (labels.every((label) => /^\d+$/.test(label))) {
+    return true;
+  }
+  return labels.some((label) => /^0x[0-9a-f]+$/i.test(label));
+}
+
+function isBlockedInternalHostname(hostname: string): boolean {
+  if (BLOCKED_EXACT_HOSTNAMES.has(hostname)) {
+    return true;
+  }
+  return BLOCKED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
+}
+
+function isAllowedCustomWhitelabelHostname(hostname: string): boolean {
+  if (!DNS_HOSTNAME.test(hostname) || !LETTER_TLD.test(hostname)) {
+    return false;
+  }
+  return hostname.includes('.');
+}
+
 export const DEFAULT_FAMULOR_HOST = 'https://app.famulor.io';
 export const CALL_COMPLETED_EVENT = 'call.completed';
+export const FAMULOR_HOST_ERROR =
+  'Base URL must be https://app.famulor.io, an https://*.famulor.io host, or a verified whitelabel hostname (DNS name with a letter TLD). IPs, localhost, private names, paths, http, and app.famulor.de are not allowed.';
+
+const FAMULOR_IO_HOSTNAME = /^([a-z0-9-]+\.)*famulor\.io$/;
+const DNS_HOSTNAME =
+  /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const LETTER_TLD = /\.[a-z]{2,63}$/;
+const IPV4_HOSTNAME = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+const BLOCKED_EXACT_HOSTNAMES = new Set(['localhost', 'metadata']);
+const BLOCKED_HOST_SUFFIXES = [
+  '.localhost',
+  '.local',
+  '.internal',
+  '.intranet',
+  '.corp',
+  '.home',
+  '.lan',
+  '.localdomain',
+];
 
 export type FamulorCredentials = {
   apiKey: string;
